@@ -1,0 +1,129 @@
+# Leaffliction - Computer Vision Project
+# Gitignore for leaf disease classification project
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+.ENV/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Machine Learning & Data Science
+# Model files
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+*.onnx
+*.pb
+*.pth
+*.pt
+*.ckpt
+model/
+models/
+checkpoints/
+saved_models/
+weights/
+
+# TensorFlow
+*.tfrecord
+*.tflite
+
+# Dataset folders
+images/
+dataset/
+data/
+raw_data/
+test*/
+
+# Generated outputs
+output/
+output_*/
+results/
+predictions/
+logs/
+*.log
+
+# Charts and visualizations
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+!README_images/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Configuration files with sensitive data
+config.ini
+*.env
+.env.local
+.env.production
+
+# Documentation build
+docs/_build/
+site/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# PyTest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
