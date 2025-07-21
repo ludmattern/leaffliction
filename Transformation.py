@@ -77,22 +77,22 @@ def transform_mask(image: np.ndarray) -> np.ndarray:
     """Create a mask to isolate the leaf from background."""
     # Convert to HSV for better color segmentation
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    
+
     # Define range for green colors (leaf)
     lower_green = np.array([25, 40, 40])
     upper_green = np.array([85, 255, 255])
-    
+
     # Create mask for green areas
     mask = cv2.inRange(hsv, lower_green, upper_green)
-    
+
     # Apply morphological operations to clean up the mask
     kernel = np.ones((5, 5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    
+
     # Apply mask to original image
     result = cv2.bitwise_and(image, image, mask=mask)
-    
+
     return result
 
 
@@ -100,18 +100,18 @@ def transform_roi_objects(image: np.ndarray) -> np.ndarray:
     """Identify and highlight regions of interest (ROI) objects."""
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
+
     # Apply threshold to get binary image
     _, thresh = cv2.threshold(gray, 0, 255,
                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
+
     # Find contours
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL,
                                    cv2.CHAIN_APPROX_SIMPLE)
-    
+
     # Create output image
     result = image.copy()
-    
+
     # Draw bounding rectangles around significant objects
     min_area = 1000  # Minimum area to consider as ROI
     for contour in contours:
@@ -119,11 +119,11 @@ def transform_roi_objects(image: np.ndarray) -> np.ndarray:
         if area > min_area:
             x, y, w, h = cv2.boundingRect(contour)
             cv2.rectangle(result, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            
+
             # Add area text
             cv2.putText(result, f'Area: {int(area)}', (x, y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-    
+
     return result
 
 
@@ -131,19 +131,19 @@ def transform_analyze_object(image: np.ndarray) -> np.ndarray:
     """Analyze objects by detecting edges and features."""
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
+
     # Apply Gaussian blur
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
+
     # Apply Canny edge detection
     edges = cv2.Canny(blurred, 50, 150)
-    
+
     # Convert edges back to 3-channel for visualization
     edges_colored = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-    
+
     # Combine original image with edge detection
     result = cv2.addWeighted(image, 0.7, edges_colored, 0.3, 0)
-    
+
     return result
 
 
@@ -151,13 +151,13 @@ def transform_pseudolandmarks(image: np.ndarray) -> np.ndarray:
     """Detect and mark pseudo-landmarks on the leaf."""
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
+
     # Detect corners using goodFeaturesToTrack
     corners = cv2.goodFeaturesToTrack(gray, maxCorners=50, qualityLevel=0.01,
                                       minDistance=20, blockSize=3)
-    
+
     result = image.copy()
-    
+
     # Draw circles at corner points (pseudo-landmarks)
     if corners is not None:
         corners = corners.astype(np.int32)
@@ -165,11 +165,11 @@ def transform_pseudolandmarks(image: np.ndarray) -> np.ndarray:
             x, y = corner.ravel()
             x, y = int(x), int(y)
             cv2.circle(result, (x, y), 5, (255, 0, 0), -1)
-            
+
             # Add landmark number
-            cv2.putText(result, str(i+1), (x+10, y+10),
+            cv2.putText(result, str(i + 1), (x + 10, y + 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-    
+
     return result
 
 
@@ -179,34 +179,34 @@ def transform_color_histogram(image: np.ndarray) -> np.ndarray:
     hist_b = cv2.calcHist([image], [0], None, [256], [0, 256])
     hist_g = cv2.calcHist([image], [1], None, [256], [0, 256])
     hist_r = cv2.calcHist([image], [2], None, [256], [0, 256])
-    
+
     # Create a simple histogram visualization on the image
     h, w = image.shape[:2]
     hist_img = np.zeros((h, w, 3), dtype=np.uint8)
-    
+
     # Normalize histograms
-    hist_b = cv2.normalize(hist_b, hist_b, 0, h//2, cv2.NORM_MINMAX)
-    hist_g = cv2.normalize(hist_g, hist_g, 0, h//2, cv2.NORM_MINMAX)
-    hist_r = cv2.normalize(hist_r, hist_r, 0, h//2, cv2.NORM_MINMAX)
-    
+    hist_b = cv2.normalize(hist_b, hist_b, 0, h // 2, cv2.NORM_MINMAX)
+    hist_g = cv2.normalize(hist_g, hist_g, 0, h // 2, cv2.NORM_MINMAX)
+    hist_r = cv2.normalize(hist_r, hist_r, 0, h // 2, cv2.NORM_MINMAX)
+
     # Draw histogram bars
     bin_w = int(w / 256)
     for i in range(256):
         pt1_b = (i * bin_w, h)
         pt2_b = (i * bin_w, h - int(hist_b[i][0]))
         cv2.line(hist_img, pt1_b, pt2_b, (255, 0, 0), 1)
-        
+
         pt1_g = (i * bin_w, h)
         pt2_g = (i * bin_w, h - int(hist_g[i][0]))
         cv2.line(hist_img, pt1_g, pt2_g, (0, 255, 0), 1)
-        
+
         pt1_r = (i * bin_w, h)
         pt2_r = (i * bin_w, h - int(hist_r[i][0]))
         cv2.line(hist_img, pt1_r, pt2_r, (0, 0, 255), 1)
-    
+
     # Combine original image and histogram
     result = np.hstack((image, hist_img))
-    
+
     return result
 
 
@@ -214,7 +214,7 @@ def apply_transformations(image_path: Path,
                           output_dir: Optional[Path] = None,
                           display_mode: bool = False) -> List[Path]:
     """Apply all 6 transformation techniques to an image."""
-    if output_dir is None and not display_mode:
+    if output_dir is None:
         output_dir = image_path.parent
 
     # Load original image
@@ -240,23 +240,23 @@ def apply_transformations(image_path: Path,
         # Display transformations in a grid
         fig, axes = plt.subplots(2, 4, figsize=(16, 8))
         fig.suptitle(f'Image Transformations: {image_path.name}', fontsize=14)
-        
+
         # Show original image
         axes[0, 0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         axes[0, 0].set_title('Original')
         axes[0, 0].axis('off')
-        
+
         # Apply and display each transformation
         for idx, (trans_name, trans_func) in enumerate(
                 transformations.items()):
             # Calculate subplot position
             row = (idx + 1) // 4
             col = (idx + 1) % 4
-            
+
             try:
                 logging.info(f"Applying {trans_name} transformation...")
                 transformed_image = trans_func(image)
-                
+
                 # Display transformation
                 if trans_name == 'ColorHistogram':
                     # Color histogram already includes the plot
@@ -267,10 +267,10 @@ def apply_transformations(image_path: Path,
                     img_rgb = cv2.cvtColor(transformed_image,
                                            cv2.COLOR_BGR2RGB)
                     axes[row, col].imshow(img_rgb)
-                
+
                 axes[row, col].set_title(trans_name)
                 axes[row, col].axis('off')
-                
+
             except Exception as e:
                 msg = f"Failed to apply {trans_name} transformation: {e}"
                 logging.error(msg)
@@ -278,13 +278,13 @@ def apply_transformations(image_path: Path,
                                     ha='center', va='center',
                                     transform=axes[row, col].transAxes)
                 axes[row, col].axis('off')
-        
+
         # Hide unused subplot
         axes[1, 3].axis('off')
-        
+
         plt.tight_layout()
         plt.show()
-        
+
     else:
         # Save transformations to files
         for trans_name, trans_func in transformations.items():
@@ -294,7 +294,7 @@ def apply_transformations(image_path: Path,
 
                 # Create output filename
                 output_filename = f"{base_name}_{trans_name}{extension}"
-                output_path = output_dir / output_filename
+                output_path = Path(output_dir) / output_filename
 
                 # Save transformed image
                 save_image(transformed_image, output_path)
@@ -330,9 +330,9 @@ def process_single_image(image_path: Path, args: argparse.Namespace) -> None:
         # Save transformations to destination directory
         output_dir = Path(args.destination)
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         output_paths = apply_transformations(image_path, output_dir)
-        
+
         logging.info(f"Successfully created {len(output_paths)} "
                      f"transformed images:")
         for path in output_paths:
@@ -374,10 +374,10 @@ def process_directory(src_dir: Path, dst_dir: Path,
             relative_path = image_path.relative_to(src_dir)
             output_subdir = dst_dir / relative_path.parent
             output_subdir.mkdir(parents=True, exist_ok=True)
-            
+
             # Apply transformations
             apply_transformations(image_path, output_subdir)
-            
+
         except Exception as e:
             logging.error(f"Failed to process {image_path}: {e}")
             continue
@@ -467,11 +467,11 @@ def main() -> None:
         if args.image_path and (args.source or args.destination):
             parser.error("Cannot use positional image_path with "
                          "-src/-dst options")
-        
+
         if args.source and not args.destination:
             parser.error("-dst (destination) is required when using "
                          "-src (source)")
-        
+
         if not args.image_path and not args.source:
             parser.error("Must specify either image_path or -src option")
 
