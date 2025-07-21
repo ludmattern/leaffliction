@@ -299,12 +299,6 @@ Output files:
         help="Verbose output for debugging"
     )
 
-    parser.add_argument(
-        '--version',
-        action='version',
-        version='Leaffliction Data Augmentation Tool v1.0'
-    )
-
     return parser
 
 
