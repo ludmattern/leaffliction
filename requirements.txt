@@ -3,3 +3,4 @@ matplotlib
 opencv-python
 numpy
 flake8
+plantcv
