@@ -83,8 +83,12 @@ class Transformation:
                                        thresh=58,
                                        img_type=cv.THRESH_BINARY)
         
+        # Verify mask is valid
+        if binary_mask is None or binary_mask.size == 0:
+            return np.zeros_like(self.img)
+        
         # Apply Gaussian blur using PlantCV
-        blurred = pcv.gaussian_blur(img=binary_mask, ksize=(15, 15),
+        blurred = pcv.gaussian_blur(img=binary_mask, ksize=(7, 7),
                                     sigma_x=0, sigma_y=None)
         return blurred
 
