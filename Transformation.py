@@ -44,64 +44,41 @@ class Transformation:
         self.mask = self._create_mask()
 
     def _create_mask(self):
-        """Create mask to isolate leaf from background."""
+        """Create binary mask to isolate leaf from background."""
+        # Convert to HSV and extract saturation channel
         hsv = cv.cvtColor(self.img, cv.COLOR_BGR2HSV)
-        lower_bound = np.array([35, 40, 40])
-        upper_bound = np.array([85, 255, 255])
-        self.mask = cv.inRange(hsv, lower_bound, upper_bound)
-        return self.mask
-
-    def _grayscale(self, color_space, channel, thresh, img_type):
-        """Convert to colorspace, extract channel and apply threshold."""
-        # Convert to specified color space
-        converted = cv.cvtColor(self.img, color_space)
-        # Extract specified channel
-        channel_img = converted[:, :, channel]
-        # Apply threshold
-        _, binary = cv.threshold(channel_img, thresh, 255, img_type)
-        return binary
-
-    def transform_mask(self):
-        """Mask transformation - isolate leaf."""
-        # Create binary mask using same method as Gaussian blur
-        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
-                                       channel=1,
-                                       thresh=58,
-                                       img_type=cv.THRESH_BINARY)
+        saturation = hsv[:, :, 1]
         
+        # Apply binary threshold
+        _, binary_mask = cv.threshold(saturation, 58, 255,
+                                      cv.THRESH_BINARY)
+        
+        # Remove noise with morphological operations
+        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+        # Opening: removes small noise (erosion followed by dilation)
+        binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_OPEN, kernel)
+        # Closing: fills small holes (dilation followed by erosion)
+        binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_CLOSE, kernel)
+        
+        return binary_mask
+
+    def gaussian_blur(self):
+        """Gaussian Blur transformation."""
+        return pcv.gaussian_blur(img=self.mask, ksize=(7, 7),
+                                 sigma_x=0, sigma_y=None)
+
+    def masked_leaf(self):
+        """Mask transformation - isolate leaf."""
         # Apply binary mask to original image to keep colors
-        result = cv.bitwise_and(self.img, self.img, mask=binary_mask)
+        result = cv.bitwise_and(self.img, self.img, mask=self.mask)
         # Set background to white
-        result[binary_mask == 0] = [255, 255, 255]
+        result[self.mask == 0] = [255, 255, 255]
         return result
 
-    def transform_gaussian_blur(self):
-        """Gaussian Blur transformation."""
-        # Get the mask (reuse from transform_mask logic)
-        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
-                                       channel=1,
-                                       thresh=58,
-                                       img_type=cv.THRESH_BINARY)
-        
-        # Verify mask is valid
-        if binary_mask is None or binary_mask.size == 0:
-            return np.zeros_like(self.img)
-        
-        # Apply Gaussian blur using PlantCV
-        blurred = pcv.gaussian_blur(img=binary_mask, ksize=(7, 7),
-                                    sigma_x=0, sigma_y=None)
-        return blurred
-
-    def transform_roi_objects(self):
+    def roi_contours(self):
         """ROI Objects transformation - draw contours."""
-        # Use the same binary mask as mask and gaussian blur
-        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
-                                      channel=1,
-                                      thresh=58,
-                                      img_type=cv.THRESH_BINARY)
-        
         # Find contours to get bounding rectangle
-        contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL,
+        contours, _ = cv.findContours(self.mask, cv.RETR_EXTERNAL,
                                       cv.CHAIN_APPROX_SIMPLE)
         
         # Start with original image
@@ -109,7 +86,7 @@ class Transformation:
         
         if contours:
             # Fill the masked area in green
-            result[binary_mask > 0] = [0, 255, 0]
+            result[self.mask > 0] = [0, 255, 0]
             
             # Get bounding rectangle for all contours combined
             all_points = np.vstack(contours)
@@ -121,83 +98,66 @@ class Transformation:
         
         return result
 
-    def transform_analyze_object(self):
-        """Analyze Object transformation."""
-        # Use the same binary mask as other transformations
-        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
-                                      channel=1,
-                                      thresh=58,
-                                      img_type=cv.THRESH_BINARY)
-
+    def analyze_shape(self):
+        """Analyze shape using PlantCV."""
         # Try PlantCV v4+ method (analyze.size with labeled mask)
         shape_img = pcv.analyze.size(img=self.img,
-                                        labeled_mask=binary_mask,
-                                        n_labels=1)
+                                     labeled_mask=self.mask,
+                                     n_labels=1)
         return shape_img
 
-    def _is_in_circle(self, x, y, center_x, center_y, radius):
-        """Check if pixel (x, y) is in circle."""
-        return (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2
-
-    def _draw_pseudolandmarks(self, img, pseudolandmarks, color, radius):
-        """Draw pseudolandmark circles on image."""
+    def _draw_pseudolandmarks(self, img, pseudolandmarks, color, radius: int):
+        """Draw pseudolandmark circles on image using OpenCV."""
         if pseudolandmarks is None or len(pseudolandmarks) == 0:
             return img
-        
-        # Iterate through pseudolandmarks structure
-        for i in range(len(pseudolandmarks)):
-            if (len(pseudolandmarks[i]) >= 1 and
-                    len(pseudolandmarks[i][0]) >= 2):
-                center_x = pseudolandmarks[i][0][1]
-                center_y = pseudolandmarks[i][0][0]
-                
-                # Draw circle by checking each pixel
-                for x in range(img.shape[0]):
-                    for y in range(img.shape[1]):
-                        if self._is_in_circle(x, y, center_x, center_y,
-                                              radius):
-                            img[x, y] = color
-        
+
+        for plm in pseudolandmarks:
+            if plm is None or len(plm) == 0:
+                continue
+
+            # Robust: accepte (1,1,2) ou (1,2) ou (2,)
+            pt = np.squeeze(np.asarray(plm))
+            if pt.size < 2:
+                continue
+
+            # Dans PlantCV les points sont typiquement [x, y] (col, row)
+            x = int(pt[0])  # colonne
+            y = int(pt[1])  # ligne
+
+            # OpenCV attend (x, y) = (col, row)
+            cv.circle(img, (x, y), radius, color, thickness=-1)
+
         return img
 
-    def transform_pseudolandmarks(self):
+    def pseudolandmarks(self):
         """Pseudolandmarks transformation."""
-        # Use the same binary mask as other transformations
-        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
-                                      channel=1,
-                                      thresh=58,
-                                      img_type=cv.THRESH_BINARY)
-        
-        # Disable debug to avoid creating plots
-        pcv.params.debug = None
-        
         result = self.img.copy()
-        
-        # Get pseudolandmarks on both axes
+
+        # Get pseudolandmarks from PlantCV
         top, bottom, center_v = pcv.homology.x_axis_pseudolandmarks(
-            img=result, mask=binary_mask, label="leaf")
+            img=result, mask=self.mask, label="leaf"
+        )
         left, right, center_h = pcv.homology.y_axis_pseudolandmarks(
-            img=result, mask=binary_mask, label="leaf")
-        
-        # Draw pseudolandmarks on the image
-        result = self._draw_pseudolandmarks(result, top, (0, 0, 255), 5)
-        result = self._draw_pseudolandmarks(result, bottom,
-                                            (255, 0, 255), 5)
-        result = self._draw_pseudolandmarks(result, center_v,
-                                            (255, 0, 0), 5)
-        result = self._draw_pseudolandmarks(result, left, (0, 255, 0), 5)
-        result = self._draw_pseudolandmarks(result, right,
-                                            (255, 255, 0), 5)
-        result = self._draw_pseudolandmarks(result, center_h,
-                                            (0, 255, 255), 5)
-        
+            img=result, mask=self.mask, label="leaf"
+        )
+
+        # Draw all landmark sets with different colors
+        landmarks = [
+            (top, (0, 0, 255)),        # Red
+            (bottom, (255, 0, 255)),   # Magenta
+            (center_v, (255, 0, 0)),   # Blue
+            (left, (0, 255, 0)),       # Green
+            (right, (255, 255, 0)),    # Yellow
+            (center_h, (0, 255, 255))  # Cyan
+        ]
+        for landmark_set, color in landmarks:
+            result = self._draw_pseudolandmarks(result, landmark_set,
+                                                color, 5)
+
         return result
 
-    def transform_color_histogram(self):
+    def color_histogram(self):
         """Color Histogram transformation."""
-        # Use PlantCV analyze.color
-        pcv.params.debug = None
-
         # Calculate color histogram for masked region
         masked = pcv.apply_mask(img=self.img, mask=self.mask,
                                 mask_color='white')
@@ -235,12 +195,12 @@ class Transformation:
     def get_all_transformations(self):
         """Get all transformation functions."""
         return {
-            'GaussianBlur': self.transform_gaussian_blur,
-            'Mask': self.transform_mask,
-            'ROIObjects': self.transform_roi_objects,
-            'AnalyzeObject': self.transform_analyze_object,
-            'Pseudolandmarks': self.transform_pseudolandmarks,
-            'ColorHistogram': self.transform_color_histogram
+            'GaussianBlur': self.gaussian_blur,
+            'Mask': self.masked_leaf,
+            'ROIObjects': self.roi_contours,
+            'AnalyzeObject': self.analyze_shape,
+            'Pseudolandmarks': self.pseudolandmarks,
+            'ColorHistogram': self.color_histogram
         }
 
 
@@ -305,7 +265,7 @@ def save_transformations(image_path, output_dir, mask_only=False):
     if mask_only:
         # Only save mask
         try:
-            result = transformer.transform_mask()
+            result = transformer.masked_leaf()
             output_name = f"{base_name}_Mask{extension}"
             output_path = output_dir / output_name
             cv.imwrite(str(output_path), result)
