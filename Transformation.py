@@ -145,22 +145,16 @@ class Transformation:
         """Pseudolandmarks transformation."""
         result = self.img.copy()
 
-        # Get pseudolandmarks from PlantCV
-        top, bottom, center_v = pcv.homology.x_axis_pseudolandmarks(
-            img=result, mask=self.mask, label="leaf"
-        )
+        # Get pseudolandmarks from PlantCV (y-axis for horizontal variation)
         left, right, center_h = pcv.homology.y_axis_pseudolandmarks(
             img=result, mask=self.mask, label="leaf"
         )
 
-        # Draw all landmark sets with different colors
+        # Draw landmark sets with different colors
         landmarks = [
-            (top, (0, 0, 255)),        # Red
-            (bottom, (255, 0, 255)),   # Magenta
-            (center_v, (255, 0, 0)),   # Blue
-            (left, (0, 255, 0)),       # Green
-            (right, (255, 255, 0)),    # Yellow
-            (center_h, (0, 255, 255))  # Cyan
+            (left, (0, 0, 255)),       # Red - left edge
+            (right, (255, 0, 255)),    # Magenta - right edge
+            (center_h, (0, 255, 0))    # Green - horizontal center
         ]
         for landmark_set, color in landmarks:
             result = self._draw_pseudolandmarks(result, landmark_set,
