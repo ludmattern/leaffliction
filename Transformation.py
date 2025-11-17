@@ -48,24 +48,23 @@ class Transformation:
         # Convert to HSV and extract saturation channel
         hsv = cv.cvtColor(self.img, cv.COLOR_BGR2HSV)
         saturation = hsv[:, :, 1]
-        
         # Apply binary threshold
         _, binary_mask = cv.threshold(saturation, 58, 255,
                                       cv.THRESH_BINARY)
-        
-        # Remove noise with morphological operations
-        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
-        # Opening: removes small noise (erosion followed by dilation)
-        binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_OPEN, kernel)
-        # Closing: fills small holes (dilation followed by erosion)
-        binary_mask = cv.morphologyEx(binary_mask, cv.MORPH_CLOSE, kernel)
-        
         return binary_mask
 
     def gaussian_blur(self):
         """Gaussian Blur transformation."""
-        return pcv.gaussian_blur(img=self.mask, ksize=(7, 7),
-                                 sigma_x=0, sigma_y=None)
+        blurred = pcv.gaussian_blur(img=self.mask, ksize=(7, 7),
+                                    sigma_x=0, sigma_y=None)
+        
+        # Clean self.mask: fill holes and remove isolated pixels
+        open_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (7, 7))
+        close_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2, 2))
+        self.mask = cv.morphologyEx(self.mask, cv.MORPH_CLOSE, close_kernel)
+        self.mask = cv.morphologyEx(self.mask, cv.MORPH_OPEN, open_kernel)
+        
+        return blurred
 
     def masked_leaf(self):
         """Mask transformation - isolate leaf."""
@@ -73,6 +72,19 @@ class Transformation:
         result = cv.bitwise_and(self.img, self.img, mask=self.mask)
         # Set background to white
         result[self.mask == 0] = [255, 255, 255]
+        
+        # Remove dark pixels (0-50) from the mask for next transformations
+        gray = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
+        dark_pixels = gray <= 30
+        self.mask[dark_pixels] = 0
+        
+        # Fill the holes left by dark pixel removal
+        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+        self.mask = cv.morphologyEx(self.mask, cv.MORPH_CLOSE, kernel)
+
+        second_kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
+        self.mask = cv.morphologyEx(self.mask, cv.MORPH_OPEN, second_kernel)
+        
         return result
 
     def roi_contours(self):
