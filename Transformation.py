@@ -22,6 +22,7 @@ from pathlib import Path
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
+import altair as alt
 from plantcv import plantcv as pcv
 
 # Disable PlantCV debug output by default
@@ -165,9 +166,47 @@ class Transformation:
         import tempfile
         import os
         
-        # Generate histogram for all color channels
+        # Convert to different colorspaces and combine channels
+        # RGB channels
+        rgb_b = self.img[:, :, 0]
+        rgb_g = self.img[:, :, 1]
+        rgb_r = self.img[:, :, 2]
+        
+        # HSV channels
+        hsv = cv.cvtColor(self.img, cv.COLOR_BGR2HSV)
+        hue = hsv[:, :, 0]
+        saturation = hsv[:, :, 1]
+        value = hsv[:, :, 2]
+        
+        # LAB channels
+        lab = cv.cvtColor(self.img, cv.COLOR_BGR2LAB)
+        lightness = lab[:, :, 0]
+        green_magenta = lab[:, :, 1]  # a* channel
+        blue_yellow = lab[:, :, 2]    # b* channel
+        
+        # Stack all 9 channels
+        all_channels = np.dstack([rgb_b, rgb_g, rgb_r, hue, saturation,
+                                  value, lightness, green_magenta,
+                                  blue_yellow])
+        
+        # Generate histogram for all channels
         hist_chart, hist_data = pcv.visualize.histogram(
-            img=self.img, mask=self.mask, hist_data=True)
+            img=all_channels, mask=self.mask, hist_data=True)
+        
+        # Update channel labels
+        channel_names = ['blue', 'green', 'red', 'hue', 'saturation',
+                         'value', 'lightness', 'green-magenta',
+                         'blue-yellow']
+        hist_data['color channel'] = hist_data['color channel'].replace(
+            {str(i): name for i, name in enumerate(channel_names)})
+        
+        # Recreate chart with proper labels
+        hist_chart = alt.Chart(hist_data).mark_line(point=True).encode(
+            x='pixel intensity',
+            y='proportion of pixels (%)',
+            color='color channel',
+            tooltip=['pixel intensity', 'proportion of pixels (%)']
+        )
         
         # Save Altair chart to temporary file and reload as image
         with tempfile.NamedTemporaryFile(suffix='.png',
@@ -202,38 +241,43 @@ def display_transformations(image_path):
     transformer = Transformation(image)
     transforms = transformer.get_all_transformations()
 
-    # Create figure
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    # Create figure with GridSpec: 3 rows, 3 cols (layout: 3-3-1 vertical)
+    fig = plt.figure(figsize=(16, 12))
+    gs = fig.add_gridspec(3, 3, hspace=0.1, wspace=0.1,
+                          left=0.02, right=0.98, top=0.89, bottom=0.02)
     fig.suptitle(f'Image Transformations: {image_path.name}', fontsize=14)
 
-    # Show original
-    axes[0, 0].imshow(cv.cvtColor(image, cv.COLOR_BGR2RGB))
-    axes[0, 0].set_title('Original')
-    axes[0, 0].axis('off')
+    # Show original in top-left
+    ax_orig = fig.add_subplot(gs[0, 0])
+    ax_orig.imshow(cv.cvtColor(image, cv.COLOR_BGR2RGB))
+    ax_orig.set_title('Original')
+    ax_orig.axis('off')
 
-    # Apply and display transformations
-    for idx, (name, func) in enumerate(transforms.items()):
-        row = (idx + 1) // 4
-        col = (idx + 1) % 4
+    # Define positions for transformations in 3-3-1 vertical layout
+    # fig1(orig) fig4     ->  (0,0) (0,1)
+    # fig2       fig5 fig7 ->  (1,0) (1,1) (1,2)
+    # fig3       fig6     ->  (2,0) (2,1)
+    transform_list = list(transforms.items())[:-1]  # All except ColorHistogram
+    positions = [(1, 0), (2, 0), (0, 1), (1, 1), (2, 1)]
+    
+    for idx, (name, func) in enumerate(transform_list):
+        row, col = positions[idx]
+        ax = fig.add_subplot(gs[row, col])
+        
+        print(f"  Applying {name}...")
+        result = func()
+        ax.imshow(cv.cvtColor(result, cv.COLOR_BGR2RGB))
+        ax.set_title(name)
+        ax.axis('off')
+    
+    # ColorHistogram spans full height on right
+    ax_hist = fig.add_subplot(gs[:, 2])
+    print("  Applying ColorHistogram...")
+    hist_result = transforms['ColorHistogram']()
+    ax_hist.imshow(cv.cvtColor(hist_result, cv.COLOR_BGR2RGB))
+    ax_hist.set_title('ColorHistogram')
+    ax_hist.axis('off')
 
-        try:
-            print(f"  Applying {name}...")
-            result = func()
-
-            axes[row, col].imshow(cv.cvtColor(result, cv.COLOR_BGR2RGB))
-            axes[row, col].set_title(name)
-            axes[row, col].axis('off')
-        except Exception as e:
-            print(f"  ✗ {name} failed: {e}")
-            axes[row, col].text(0.5, 0.5, f'Error:\\n{name}',
-                                ha='center', va='center',
-                                transform=axes[row, col].transAxes)
-            axes[row, col].axis('off')
-
-    # Hide unused subplot
-    axes[1, 3].axis('off')
-
-    plt.tight_layout()
     plt.show()
 
 
