@@ -127,16 +127,14 @@ class Transformation:
             if plm is None or len(plm) == 0:
                 continue
 
-            # Robust: accepte (1,1,2) ou (1,2) ou (2,)
             pt = np.squeeze(np.asarray(plm))
             if pt.size < 2:
                 continue
 
-            # Dans PlantCV les points sont typiquement [x, y] (col, row)
-            x = int(pt[0])  # colonne
-            y = int(pt[1])  # ligne
+            x = int(pt[0])  # column
+            y = int(pt[1])  # row
 
-            # OpenCV attend (x, y) = (col, row)
+            # OpenCV expects (x, y) = (col, row)
             cv.circle(img, (x, y), radius, color, thickness=-1)
 
         return img
