@@ -12,35 +12,7 @@ IV.2 Part 2: Data augmentation . . . . . . . . . . . . . . . . . . . . . . . . 6
 IV.3 Part 3: Image Transformation . . . . . . . . . . . . . . . . . . . . . . 7
 IV.4 Part 4: Classification . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
 V Turn-in and peer-evaluation 11
-1
-Chapter I
-Foreword
-“No,” Arthur said, “look, it’s very, very simple. . . . All I want. . . is a cup of tea. You are
-going to make one for me. Now keep quiet and listen.”
-And he sat. He told the Nutro-Matic about India, he told it about China, he told it
-about Ceylon. He told it about broad leaves drying in the sun. He told it about silver
-teapots. He told it about summer afternoons on the lawn. He told it about putting the
-milk in before the tea so it wouldn’t get scalded. He even told it (briefly) about the East
-India Trading Company.
-“So that’s it, is it?” said the Nutro-Matic when he had finished.
-“Yes,” said Arthur. “That is what I want.”
-“You want the taste of dried leaves boiled in water?”
-“Er, yes. With milk.”
-“Squirted out of a cow?”
-“Well in a manner of speaking, I suppose. . . ”
-“I’m going to need some help with this one.”
-Douglas Adams, The Restaurant At The End Of The Universe
-2
-Chapter II
-Introduction
-Computer vision tasks include methods for acquiring, processing, analyzing and understanding digital images, and extraction of high-dimensional data from the real world in
-order to produce numerical or symbolic information, e.g. in the forms of decisions.
-Understanding in this context means the transformation of visual images (the input
-of the retina) into descriptions of the world that make sense to thought processes and can
-elicit appropriate action. This image understanding can be seen as the disentangling of
-symbolic information from image data using models constructed with the aid of geometry,
-physics, statistics, and learning theory.
-3
+
 Chapter III
 General rules
 • You have to render your modules from a computer in the cluster either using a

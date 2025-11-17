@@ -2,3 +2,4 @@ seaborn
 matplotlib
 opencv-python
 numpy
+flake8
