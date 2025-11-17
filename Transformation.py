@@ -122,19 +122,18 @@ class Transformation:
         return result
 
     def transform_analyze_object(self):
-        """Analyze Object transformation - edge detection."""
-        # Simple edge detection analysis
-        gray = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
-        edges = cv.Canny(gray, 50, 150)
+        """Analyze Object transformation."""
+        # Use the same binary mask as other transformations
+        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
+                                      channel=1,
+                                      thresh=58,
+                                      img_type=cv.THRESH_BINARY)
 
-        # Apply mask to edges
-        edges_masked = cv.bitwise_and(edges, edges, mask=self.mask)
-
-        # Convert to BGR and overlay on original
-        edges_bgr = cv.cvtColor(edges_masked, cv.COLOR_GRAY2BGR)
-        result = cv.addWeighted(self.img, 0.7, edges_bgr, 0.3, 0)
-
-        return result
+        # Try PlantCV v4+ method (analyze.size with labeled mask)
+        shape_img = pcv.analyze.size(img=self.img,
+                                        labeled_mask=binary_mask,
+                                        n_labels=1)
+        return shape_img
 
     def transform_pseudolandmarks(self):
         """Pseudolandmarks transformation - corner detection."""
