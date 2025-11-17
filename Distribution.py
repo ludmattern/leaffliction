@@ -12,6 +12,7 @@ Usage:
 
 import sys
 from pathlib import Path
+import json
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -155,25 +156,34 @@ def print_statistics(counts, dataset_name):
 def main():
     """Main function - analyze dataset and display charts."""
     # Check arguments and show help
-    if len(sys.argv) != 2 or sys.argv[1] in ['-h', '--help', 'help']:
+    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', 'help']:
         print("Distribution.py - Leaffliction Dataset Analysis")
         print("\nUsage:")
-        print("  ./Distribution.py <directory>")
+        print("  ./Distribution.py <directory> [--export stats.json]")
         print("\nDescription:")
         print("  Analyzes image distribution in a dataset and displays")
         print("  pie chart and bar chart for visualization.")
+        print("\nOptions:")
+        print("  --export FILE  Export statistics to JSON file")
         print("\nSupported structures:")
         print("  - Flat:        dataset/Disease/images.jpg")
         print("  - Hierarchical: dataset/Plant/Disease/images.jpg")
         print("  - Any depth:   dataset/A/B/C/.../images.jpg")
         print("\nExamples:")
         print("  ./Distribution.py ./Apple")
-        print("  ./Distribution.py ./leaves")
+        print("  ./Distribution.py ./leaves --export stats.json")
         print("  ./Distribution.py /path/to/dataset")
-        sys.exit(0 if sys.argv[1] in ['-h', '--help', 'help'] else 1)
+        sys.exit(0 if len(sys.argv) > 1 and
+                 sys.argv[1] in ['-h', '--help', 'help'] else 1)
 
-    # Get directory path
+    # Parse arguments
     directory = Path(sys.argv[1]).resolve()
+    export_file = None
+
+    if '--export' in sys.argv:
+        idx = sys.argv.index('--export')
+        if idx + 1 < len(sys.argv):
+            export_file = Path(sys.argv[idx + 1])
 
     # Validate directory exists
     if not directory.exists():
@@ -201,6 +211,22 @@ def main():
 
     # Display statistics
     print_statistics(counts, dataset_name)
+
+    # Export to JSON if requested
+    if export_file:
+        stats_data = {
+            'dataset_name': dataset_name,
+            'dataset_path': str(directory),
+            'classes': counts,
+            'total_images': sum(counts.values()),
+            'num_classes': len(counts),
+            'min_count': min(counts.values()),
+            'max_count': max(counts.values()),
+            'balance_ratio': min(counts.values()) / max(counts.values())
+        }
+        with open(export_file, 'w') as f:
+            json.dump(stats_data, f, indent=2)
+        print(f"\n✓ Statistics exported to: {export_file}")
 
     # Display charts
     print("Generating charts...")

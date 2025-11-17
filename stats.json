@@ -1,0 +1,19 @@
+{
+  "dataset_name": "leaves",
+  "dataset_path": "/goinfre/lmattern/leaffliction/leaves",
+  "classes": {
+    "Grape_spot": 1075,
+    "Apple_healthy": 1640,
+    "Grape_Black_rot": 1178,
+    "Apple_Black_rot": 620,
+    "Grape_Esca": 1382,
+    "Grape_healthy": 422,
+    "Apple_rust": 275,
+    "Apple_scab": 629
+  },
+  "total_images": 7221,
+  "num_classes": 8,
+  "min_count": 275,
+  "max_count": 1640,
+  "balance_ratio": 0.1676829268292683
+}
