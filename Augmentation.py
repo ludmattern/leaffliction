@@ -29,6 +29,7 @@ pcv.params.debug = None
 
 
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
+DEFAULT_OUTPUT_DIR = 'augmented_dataset'
 
 
 def is_image(filename):
@@ -252,33 +253,48 @@ def balance_dataset(stats_file, output_dir):
     print(f"{'='*60}\n")
 
 
-def main():
-    """Main function."""
-    # Show help
-    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
-        print(__doc__)
-        sys.exit(0)
+def parse_balance_args():
+    """Parse arguments for balance mode.
 
-    # Balance dataset mode
-    if '--balance' in sys.argv:
-        idx = sys.argv.index('--balance')
-        if idx + 1 >= len(sys.argv):
-            print("Error: --balance requires a stats file")
-            sys.exit(1)
+    Returns:
+        tuple: (stats_file, output_dir) or (None, None) if invalid
+    """
+    if '--balance' not in sys.argv:
+        return None, None
 
-        stats_file = Path(sys.argv[idx + 1])
-        if not stats_file.exists():
-            print(f"Error: Stats file not found: {stats_file}")
-            sys.exit(1)
+    idx = sys.argv.index('--balance')
+    if idx + 1 >= len(sys.argv):
+        print("Error: --balance requires a stats file")
+        sys.exit(1)
 
-        output_dir = sys.argv[sys.argv.index('--output') + 1] \
-            if '--output' in sys.argv else 'augmented_dataset'
+    stats_file = Path(sys.argv[idx + 1])
+    if not stats_file.exists():
+        print(f"Error: Stats file not found: {stats_file}")
+        sys.exit(1)
 
-        balance_dataset(stats_file, output_dir)
-        return
+    # Get output directory safely
+    output_dir = DEFAULT_OUTPUT_DIR
+    if '--output' in sys.argv:
+        out_idx = sys.argv.index('--output')
+        if out_idx + 1 < len(sys.argv):
+            output_dir = sys.argv[out_idx + 1]
 
-    # Single image mode
-    image_path = Path(sys.argv[1]).resolve()
+    return stats_file, output_dir
+
+
+def validate_image_path(path_str):
+    """Validate and return image path.
+
+    Args:
+        path_str: Path string from command line
+
+    Returns:
+        Path: Validated image path
+
+    Raises:
+        SystemExit: If validation fails
+    """
+    image_path = Path(path_str).resolve()
 
     if not image_path.exists() or not image_path.is_file():
         print(f"Error: File not found: {image_path}")
@@ -288,14 +304,40 @@ def main():
         print(f"Error: Not a valid image: {image_path}")
         sys.exit(1)
 
-    # Process image
-    print(f"\nProcessing: {image_path.name}")
-    print("Applying 6 augmentations...\n")
+    return image_path
 
-    output_paths = apply_augmentations(image_path)
 
-    print(f"\n✓ Successfully created {len(output_paths)} augmented images")
-    print(f"  Saved in: {image_path.parent}")
+def main():
+    """Main function."""
+    try:
+        # Show help
+        if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
+            print(__doc__)
+            sys.exit(0)
+
+        # Balance dataset mode
+        stats_file, output_dir = parse_balance_args()
+        if stats_file:
+            balance_dataset(stats_file, output_dir)
+            return
+
+        # Single image mode
+        image_path = validate_image_path(sys.argv[1])
+
+        print(f"\nProcessing: {image_path.name}")
+        print("Applying 6 augmentations...\n")
+
+        output_paths = apply_augmentations(image_path)
+
+        print(f"\n✓ Successfully created {len(output_paths)} augmented images")
+        print(f"  Saved in: {image_path.parent}")
+
+    except KeyboardInterrupt:
+        print("\n\n⚠ Operation cancelled by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n✗ Unexpected error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

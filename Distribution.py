@@ -168,66 +168,74 @@ def print_statistics(counts, dataset_name):
 
 def main():
     """Main function - analyze dataset and display charts."""
-    # Check arguments and show help
-    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
-        print(__doc__)
-        sys.exit(0)
+    try:
+        # Check arguments and show help
+        if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
+            print(__doc__)
+            sys.exit(0)
 
-    # Parse arguments
-    directory = Path(sys.argv[1]).resolve()
-    export_file = None
+        # Parse arguments
+        directory = Path(sys.argv[1]).resolve()
+        export_file = None
 
-    if '--export' in sys.argv:
-        idx = sys.argv.index('--export')
-        if idx + 1 < len(sys.argv):
-            export_file = Path(sys.argv[idx + 1])
+        if '--export' in sys.argv:
+            idx = sys.argv.index('--export')
+            if idx + 1 < len(sys.argv):
+                export_file = Path(sys.argv[idx + 1])
 
-    # Validate directory exists
-    if not directory.exists():
-        print(f"Error: Directory '{directory}' does not exist")
+        # Validate directory exists
+        if not directory.exists():
+            print(f"Error: Directory not found: {directory}")
+            sys.exit(1)
+
+        if not directory.is_dir():
+            print(f"Error: Not a directory: {directory}")
+            sys.exit(1)
+
+        # Get dataset name
+        dataset_name = directory.name
+
+        print(f"\nAnalyzing dataset: {dataset_name}")
+        print(f"Directory: {directory}")
+        print("\nScanning subdirectories...")
+
+        # Count images in each class
+        counts = count_images(directory)
+
+        if not counts:
+            print("\nNo images found in subdirectories")
+            print("Expected structure: <directory>/<class>/<images>")
+            sys.exit(1)
+
+        # Display statistics
+        print_statistics(counts, dataset_name)
+
+        # Export to JSON if requested
+        if export_file:
+            stats_data = {
+                'dataset_name': dataset_name,
+                'dataset_path': str(directory),
+                'classes': counts,
+                'total_images': sum(counts.values()),
+                'num_classes': len(counts),
+                'min_count': min(counts.values()),
+                'max_count': max(counts.values()),
+                'balance_ratio': min(counts.values()) / max(counts.values())
+            }
+            with open(export_file, 'w') as f:
+                json.dump(stats_data, f, indent=2)
+            print(f"\n✓ Statistics exported to: {export_file}")
+
+        # Display charts
+        print("Generating charts...")
+        display_charts(counts, dataset_name)
+
+    except KeyboardInterrupt:
+        print("\n\n⚠ Operation cancelled by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n✗ Unexpected error: {e}")
         sys.exit(1)
-
-    if not directory.is_dir():
-        print(f"Error: '{directory}' is not a directory")
-        sys.exit(1)
-
-    # Get dataset name
-    dataset_name = directory.name
-
-    print(f"\nAnalyzing dataset: {dataset_name}")
-    print(f"Directory: {directory}")
-    print("\nScanning subdirectories...")
-
-    # Count images in each class
-    counts = count_images(directory)
-
-    if not counts:
-        print("\nNo images found in subdirectories")
-        print("Expected structure: <directory>/<class>/<images>")
-        sys.exit(1)
-
-    # Display statistics
-    print_statistics(counts, dataset_name)
-
-    # Export to JSON if requested
-    if export_file:
-        stats_data = {
-            'dataset_name': dataset_name,
-            'dataset_path': str(directory),
-            'classes': counts,
-            'total_images': sum(counts.values()),
-            'num_classes': len(counts),
-            'min_count': min(counts.values()),
-            'max_count': max(counts.values()),
-            'balance_ratio': min(counts.values()) / max(counts.values())
-        }
-        with open(export_file, 'w') as f:
-            json.dump(stats_data, f, indent=2)
-        print(f"\n✓ Statistics exported to: {export_file}")
-
-    # Display charts
-    print("Generating charts...")
-    display_charts(counts, dataset_name)
 
 
 if __name__ == "__main__":
