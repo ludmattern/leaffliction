@@ -162,39 +162,23 @@ class Transformation:
 
     def color_histogram(self):
         """Color Histogram transformation."""
-        # Calculate color histogram for masked region
-        masked = pcv.apply_mask(img=self.img, mask=self.mask,
-                                mask_color='white')
-
-        # Create histogram visualization
-        hist_b = cv.calcHist([masked], [0], self.mask, [256], [0, 256])
-        hist_g = cv.calcHist([masked], [1], self.mask, [256], [0, 256])
-        hist_r = cv.calcHist([masked], [2], self.mask, [256], [0, 256])
-
-        # Create histogram image
-        h, w = self.img.shape[:2]
-        hist_img = np.zeros((h, w, 3), dtype=np.uint8)
-        hist_img.fill(255)  # White background
-
-        # Normalize histograms
-        hist_b = cv.normalize(hist_b, hist_b, 0, h - 50, cv.NORM_MINMAX)
-        hist_g = cv.normalize(hist_g, hist_g, 0, h - 50, cv.NORM_MINMAX)
-        hist_r = cv.normalize(hist_r, hist_r, 0, h - 50, cv.NORM_MINMAX)
-
-        # Draw histogram
-        bin_w = int(w / 256)
-        for i in range(256):
-            cv.line(hist_img, (i * bin_w, h),
-                    (i * bin_w, h - int(hist_b[i][0])), (255, 0, 0), 1)
-            cv.line(hist_img, (i * bin_w, h),
-                    (i * bin_w, h - int(hist_g[i][0])), (0, 255, 0), 1)
-            cv.line(hist_img, (i * bin_w, h),
-                    (i * bin_w, h - int(hist_r[i][0])), (0, 0, 255), 1)
-
-        # Combine original and histogram
-        result = np.hstack((self.img, hist_img))
-
-        return result
+        import tempfile
+        import os
+        
+        # Generate histogram for all color channels
+        hist_chart, hist_data = pcv.visualize.histogram(
+            img=self.img, mask=self.mask, hist_data=True)
+        
+        # Save Altair chart to temporary file and reload as image
+        with tempfile.NamedTemporaryFile(suffix='.png',
+                                         delete=False) as tmp:
+            tmp_path = tmp.name
+        
+        hist_chart.save(tmp_path)
+        hist_img = cv.imread(tmp_path)
+        os.unlink(tmp_path)
+        
+        return hist_img
 
     def get_all_transformations(self):
         """Get all transformation functions."""
