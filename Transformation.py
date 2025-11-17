@@ -1,501 +1,368 @@
 #!/usr/bin/env python3
-"""
-Transformation.py
+"""Transformation.py - Image Transformation Tool
 
-Leaffliction - Computer Vision Project
-Image transformation tool for feature extraction from leaf images.
-
-This program implements 6 types of image transformations for analyzing
-leaf characteristics: Gaussian Blur, Mask, ROI Objects, Analyze Object,
-Pseudolandmarks, and Color Histogram.
+Applies 6 types of image transformations for leaf feature extraction.
 
 Usage:
-    python Transformation.py <image_path>            # Display transformations
-    python Transformation.py -src <dir> -dst <dir>  # Process directory
-    python Transformation.py -src <dir> -dst <dir> -mask  # Process with mask
+  ./Transformation.py <image_path>
+  ./Transformation.py -src <dir> -dst <dir> [-mask]
+
+Transformations:
+  Gaussian Blur, Mask, ROI Objects, Analyze Object,
+  Pseudolandmarks, Color Histogram
+
+Examples:
+  ./Transformation.py ./Apple/image.JPG
+  ./Transformation.py -src ./Apple/ -dst ./output/
 """
 
 import sys
-import argparse
-import logging
 from pathlib import Path
-from typing import List, Optional
 
-import cv2
+import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
+from plantcv import plantcv as pcv
+
+# Disable PlantCV debug output by default
+pcv.params.debug = None
+
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
 
 
-def setup_logging(verbose: bool = False) -> None:
-    """Configure the logging system."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+def is_image(filename):
+    """Check if file is an image based on extension."""
+    return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
 
 
-def is_image_file(filename: str) -> bool:
-    """Check if a file is an image based on its extension."""
-    IMG_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
-    return Path(filename).suffix.lower() in IMG_EXTENSIONS
+class Transformation:
+    """Image transformation class using PlantCV."""
+
+    def __init__(self, image: np.ndarray):
+        """Initialize with an image array."""
+        self.img = image
+        self.mask = self._create_mask()
+
+    def _create_mask(self):
+        """Create mask to isolate leaf from background."""
+        hsv = cv.cvtColor(self.img, cv.COLOR_BGR2HSV)
+        lower_bound = np.array([35, 40, 40])
+        upper_bound = np.array([85, 255, 255])
+        self.mask = cv.inRange(hsv, lower_bound, upper_bound)
+        return self.mask
+
+    def _grayscale(self, color_space, channel, thresh, img_type):
+        """Convert to colorspace, extract channel and apply threshold."""
+        # Convert to specified color space
+        converted = cv.cvtColor(self.img, color_space)
+        # Extract specified channel
+        channel_img = converted[:, :, channel]
+        # Apply threshold
+        _, binary = cv.threshold(channel_img, thresh, 255, img_type)
+        return binary
+
+    def transform_mask(self):
+        """Mask transformation - isolate leaf."""
+        # Create binary mask using same method as Gaussian blur
+        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
+                                       channel=1,
+                                       thresh=58,
+                                       img_type=cv.THRESH_BINARY)
+        
+        # Apply binary mask to original image to keep colors
+        result = cv.bitwise_and(self.img, self.img, mask=binary_mask)
+        # Set background to white
+        result[binary_mask == 0] = [255, 255, 255]
+        return result
+
+    def transform_gaussian_blur(self):
+        """Gaussian Blur transformation."""
+        # Get the mask (reuse from transform_mask logic)
+        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
+                                       channel=1,
+                                       thresh=58,
+                                       img_type=cv.THRESH_BINARY)
+        
+        # Apply Gaussian blur using PlantCV
+        blurred = pcv.gaussian_blur(img=binary_mask, ksize=(10, 10),
+                                    sigma_x=0, sigma_y=None)
+        return blurred
+
+    def transform_roi_objects(self):
+        """ROI Objects transformation - draw contours."""
+        contours, _ = cv.findContours(self.mask, cv.RETR_TREE,
+                                      cv.CHAIN_APPROX_SIMPLE)
+        result = self.img.copy()
+        cv.drawContours(result, contours, -1, (0, 255, 0), 2)
+
+        # Add bounding boxes for large objects
+        for contour in contours:
+            area = cv.contourArea(contour)
+            if area > 1000:
+                x, y, w, h = cv.boundingRect(contour)
+                cv.rectangle(result, (x, y), (x + w, y + h),
+                             (255, 0, 0), 2)
+        return result
+
+    def transform_analyze_object(self):
+        """Analyze Object transformation - edge detection."""
+        # Simple edge detection analysis
+        gray = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
+        edges = cv.Canny(gray, 50, 150)
+
+        # Apply mask to edges
+        edges_masked = cv.bitwise_and(edges, edges, mask=self.mask)
+
+        # Convert to BGR and overlay on original
+        edges_bgr = cv.cvtColor(edges_masked, cv.COLOR_GRAY2BGR)
+        result = cv.addWeighted(self.img, 0.7, edges_bgr, 0.3, 0)
+
+        return result
+
+    def transform_pseudolandmarks(self):
+        """Pseudolandmarks transformation - corner detection."""
+        gray = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
+
+        # Mask gray image
+        gray_masked = cv.bitwise_and(gray, gray, mask=self.mask)
+
+        # Detect corners
+        corners = cv.goodFeaturesToTrack(gray_masked, maxCorners=50,
+                                         qualityLevel=0.01, minDistance=20)
+
+        result = self.img.copy()
+
+        # Draw landmarks
+        if corners is not None:
+            for i, corner in enumerate(corners):
+                x, y = corner.ravel()
+                cv.circle(result, (int(x), int(y)), 5, (0, 0, 255), -1)
+                cv.putText(result, str(i + 1), (int(x) + 10, int(y) + 10),
+                           cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+
+        return result
+
+    def transform_color_histogram(self):
+        """Color Histogram transformation."""
+        # Use PlantCV analyze.color
+        pcv.params.debug = None
+
+        # Calculate color histogram for masked region
+        masked = pcv.apply_mask(img=self.img, mask=self.mask,
+                                mask_color='white')
+
+        # Create histogram visualization
+        hist_b = cv.calcHist([masked], [0], self.mask, [256], [0, 256])
+        hist_g = cv.calcHist([masked], [1], self.mask, [256], [0, 256])
+        hist_r = cv.calcHist([masked], [2], self.mask, [256], [0, 256])
+
+        # Create histogram image
+        h, w = self.img.shape[:2]
+        hist_img = np.zeros((h, w, 3), dtype=np.uint8)
+        hist_img.fill(255)  # White background
+
+        # Normalize histograms
+        hist_b = cv.normalize(hist_b, hist_b, 0, h - 50, cv.NORM_MINMAX)
+        hist_g = cv.normalize(hist_g, hist_g, 0, h - 50, cv.NORM_MINMAX)
+        hist_r = cv.normalize(hist_r, hist_r, 0, h - 50, cv.NORM_MINMAX)
+
+        # Draw histogram
+        bin_w = int(w / 256)
+        for i in range(256):
+            cv.line(hist_img, (i * bin_w, h),
+                    (i * bin_w, h - int(hist_b[i][0])), (255, 0, 0), 1)
+            cv.line(hist_img, (i * bin_w, h),
+                    (i * bin_w, h - int(hist_g[i][0])), (0, 255, 0), 1)
+            cv.line(hist_img, (i * bin_w, h),
+                    (i * bin_w, h - int(hist_r[i][0])), (0, 0, 255), 1)
+
+        # Combine original and histogram
+        result = np.hstack((self.img, hist_img))
+
+        return result
+
+    def get_all_transformations(self):
+        """Get all transformation functions."""
+        return {
+            'GaussianBlur': self.transform_gaussian_blur,
+            'Mask': self.transform_mask,
+            'ROIObjects': self.transform_roi_objects,
+            'AnalyzeObject': self.transform_analyze_object,
+            'Pseudolandmarks': self.transform_pseudolandmarks,
+            'ColorHistogram': self.transform_color_histogram
+        }
 
 
-def load_image(image_path: Path) -> np.ndarray:
-    """Load an image using OpenCV."""
-    try:
-        image = cv2.imread(str(image_path))
-        if image is None:
-            raise ValueError(f"Could not load image: {image_path}")
-        return image
-    except Exception as e:
-        logging.error(f"Error loading image {image_path}: {e}")
-        raise
+def display_transformations(image_path):
+    """Display all transformations in a grid."""
+    image = cv.imread(str(image_path))
+    if image is None:
+        print(f"Error: Could not load image: {image_path}")
+        sys.exit(1)
+
+    transformer = Transformation(image)
+    transforms = transformer.get_all_transformations()
+
+    # Create figure
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    fig.suptitle(f'Image Transformations: {image_path.name}', fontsize=14)
+
+    # Show original
+    axes[0, 0].imshow(cv.cvtColor(image, cv.COLOR_BGR2RGB))
+    axes[0, 0].set_title('Original')
+    axes[0, 0].axis('off')
+
+    # Apply and display transformations
+    for idx, (name, func) in enumerate(transforms.items()):
+        row = (idx + 1) // 4
+        col = (idx + 1) % 4
+
+        try:
+            print(f"  Applying {name}...")
+            result = func()
+
+            axes[row, col].imshow(cv.cvtColor(result, cv.COLOR_BGR2RGB))
+            axes[row, col].set_title(name)
+            axes[row, col].axis('off')
+        except Exception as e:
+            print(f"  ✗ {name} failed: {e}")
+            axes[row, col].text(0.5, 0.5, f'Error:\\n{name}',
+                                ha='center', va='center',
+                                transform=axes[row, col].transAxes)
+            axes[row, col].axis('off')
+
+    # Hide unused subplot
+    axes[1, 3].axis('off')
+
+    plt.tight_layout()
+    plt.show()
 
 
-def save_image(image: np.ndarray, output_path: Path) -> None:
-    """Save an image using OpenCV."""
-    try:
-        success = cv2.imwrite(str(output_path), image)
-        if not success:
-            raise ValueError(f"Could not save image: {output_path}")
-        logging.debug(f"Saved transformed image: {output_path}")
-    except Exception as e:
-        logging.error(f"Error saving image {output_path}: {e}")
-        raise
+def save_transformations(image_path, output_dir, mask_only=False):
+    """Save all transformations to files."""
+    image = cv.imread(str(image_path))
+    if image is None:
+        print(f"Error: Could not load image: {image_path}")
+        return []
 
-
-def transform_gaussian_blur(image: np.ndarray) -> np.ndarray:
-    """Apply Gaussian blur transformation for noise reduction."""
-    # Apply Gaussian blur with kernel size 15x15
-    blurred = cv2.GaussianBlur(image, (15, 15), 0)
-    return blurred
-
-
-def transform_mask(image: np.ndarray) -> np.ndarray:
-    """Create a mask to isolate the leaf from background."""
-    # Convert to HSV for better color segmentation
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    # Define range for green colors (leaf)
-    lower_green = np.array([25, 40, 40])
-    upper_green = np.array([85, 255, 255])
-
-    # Create mask for green areas
-    mask = cv2.inRange(hsv, lower_green, upper_green)
-
-    # Apply morphological operations to clean up the mask
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-    # Apply mask to original image
-    result = cv2.bitwise_and(image, image, mask=mask)
-
-    return result
-
-
-def transform_roi_objects(image: np.ndarray) -> np.ndarray:
-    """Identify and highlight regions of interest (ROI) objects."""
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Apply threshold to get binary image
-    _, thresh = cv2.threshold(gray, 0, 255,
-                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Find contours
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL,
-                                   cv2.CHAIN_APPROX_SIMPLE)
-
-    # Create output image
-    result = image.copy()
-
-    # Draw bounding rectangles around significant objects
-    min_area = 1000  # Minimum area to consider as ROI
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area > min_area:
-            x, y, w, h = cv2.boundingRect(contour)
-            cv2.rectangle(result, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-            # Add area text
-            cv2.putText(result, f'Area: {int(area)}', (x, y - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
-    return result
-
-
-def transform_analyze_object(image: np.ndarray) -> np.ndarray:
-    """Analyze objects by detecting edges and features."""
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Apply Gaussian blur
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # Apply Canny edge detection
-    edges = cv2.Canny(blurred, 50, 150)
-
-    # Convert edges back to 3-channel for visualization
-    edges_colored = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-
-    # Combine original image with edge detection
-    result = cv2.addWeighted(image, 0.7, edges_colored, 0.3, 0)
-
-    return result
-
-
-def transform_pseudolandmarks(image: np.ndarray) -> np.ndarray:
-    """Detect and mark pseudo-landmarks on the leaf."""
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Detect corners using goodFeaturesToTrack
-    corners = cv2.goodFeaturesToTrack(gray, maxCorners=50, qualityLevel=0.01,
-                                      minDistance=20, blockSize=3)
-
-    result = image.copy()
-
-    # Draw circles at corner points (pseudo-landmarks)
-    if corners is not None:
-        corners = corners.astype(np.int32)
-        for i, corner in enumerate(corners):
-            x, y = corner.ravel()
-            x, y = int(x), int(y)
-            cv2.circle(result, (x, y), 5, (255, 0, 0), -1)
-
-            # Add landmark number
-            cv2.putText(result, str(i + 1), (x + 10, y + 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-
-    return result
-
-
-def transform_color_histogram(image: np.ndarray) -> np.ndarray:
-    """Create a color histogram visualization."""
-    # Calculate histograms for each color channel
-    hist_b = cv2.calcHist([image], [0], None, [256], [0, 256])
-    hist_g = cv2.calcHist([image], [1], None, [256], [0, 256])
-    hist_r = cv2.calcHist([image], [2], None, [256], [0, 256])
-
-    # Create a simple histogram visualization on the image
-    h, w = image.shape[:2]
-    hist_img = np.zeros((h, w, 3), dtype=np.uint8)
-
-    # Normalize histograms
-    hist_b = cv2.normalize(hist_b, hist_b, 0, h // 2, cv2.NORM_MINMAX)
-    hist_g = cv2.normalize(hist_g, hist_g, 0, h // 2, cv2.NORM_MINMAX)
-    hist_r = cv2.normalize(hist_r, hist_r, 0, h // 2, cv2.NORM_MINMAX)
-
-    # Draw histogram bars
-    bin_w = int(w / 256)
-    for i in range(256):
-        pt1_b = (i * bin_w, h)
-        pt2_b = (i * bin_w, h - int(hist_b[i][0]))
-        cv2.line(hist_img, pt1_b, pt2_b, (255, 0, 0), 1)
-
-        pt1_g = (i * bin_w, h)
-        pt2_g = (i * bin_w, h - int(hist_g[i][0]))
-        cv2.line(hist_img, pt1_g, pt2_g, (0, 255, 0), 1)
-
-        pt1_r = (i * bin_w, h)
-        pt2_r = (i * bin_w, h - int(hist_r[i][0]))
-        cv2.line(hist_img, pt1_r, pt2_r, (0, 0, 255), 1)
-
-    # Combine original image and histogram
-    result = np.hstack((image, hist_img))
-
-    return result
-
-
-def apply_transformations(image_path: Path,
-                          output_dir: Optional[Path] = None,
-                          display_mode: bool = False) -> List[Path]:
-    """Apply all 6 transformation techniques to an image."""
-    if output_dir is None:
-        output_dir = image_path.parent
-
-    # Load original image
-    image = load_image(image_path)
-
-    # Define transformation functions
-    transformations = {
-        'GaussianBlur': transform_gaussian_blur,
-        'Mask': transform_mask,
-        'ROIObjects': transform_roi_objects,
-        'AnalyzeObject': transform_analyze_object,
-        'Pseudolandmarks': transform_pseudolandmarks,
-        'ColorHistogram': transform_color_histogram
-    }
-
-    # Generate base filename without extension
+    transformer = Transformation(image)
     base_name = image_path.stem
     extension = image_path.suffix
 
     output_paths = []
 
-    if display_mode:
-        # Display transformations in a grid
-        fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-        fig.suptitle(f'Image Transformations: {image_path.name}', fontsize=14)
-
-        # Show original image
-        axes[0, 0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        axes[0, 0].set_title('Original')
-        axes[0, 0].axis('off')
-
-        # Apply and display each transformation
-        for idx, (trans_name, trans_func) in enumerate(
-                transformations.items()):
-            # Calculate subplot position
-            row = (idx + 1) // 4
-            col = (idx + 1) % 4
-
-            try:
-                logging.info(f"Applying {trans_name} transformation...")
-                transformed_image = trans_func(image)
-
-                # Display transformation
-                if trans_name == 'ColorHistogram':
-                    # Color histogram already includes the plot
-                    img_rgb = cv2.cvtColor(transformed_image,
-                                           cv2.COLOR_BGR2RGB)
-                    axes[row, col].imshow(img_rgb)
-                else:
-                    img_rgb = cv2.cvtColor(transformed_image,
-                                           cv2.COLOR_BGR2RGB)
-                    axes[row, col].imshow(img_rgb)
-
-                axes[row, col].set_title(trans_name)
-                axes[row, col].axis('off')
-
-            except Exception as e:
-                msg = f"Failed to apply {trans_name} transformation: {e}"
-                logging.error(msg)
-                axes[row, col].text(0.5, 0.5, f'Error: {trans_name}',
-                                    ha='center', va='center',
-                                    transform=axes[row, col].transAxes)
-                axes[row, col].axis('off')
-
-        # Hide unused subplot
-        axes[1, 3].axis('off')
-
-        plt.tight_layout()
-        plt.show()
-
+    if mask_only:
+        # Only save mask
+        try:
+            result = transformer.transform_mask()
+            output_name = f"{base_name}_Mask{extension}"
+            output_path = output_dir / output_name
+            cv.imwrite(str(output_path), result)
+            output_paths.append(output_path)
+            print(f"  Created: {output_name}")
+        except Exception as e:
+            print(f"  ✗ Mask failed: {e}")
     else:
-        # Save transformations to files
-        for trans_name, trans_func in transformations.items():
+        # Save all transformations
+        transforms = transformer.get_all_transformations()
+        for name, func in transforms.items():
             try:
-                logging.info(f"Applying {trans_name} transformation...")
-                transformed_image = trans_func(image)
-
-                # Create output filename
-                output_filename = f"{base_name}_{trans_name}{extension}"
-                output_path = Path(output_dir) / output_filename
-
-                # Save transformed image
-                save_image(transformed_image, output_path)
+                result = func()
+                output_name = f"{base_name}_{name}{extension}"
+                output_path = output_dir / output_name
+                cv.imwrite(str(output_path), result)
                 output_paths.append(output_path)
-
+                print(f"  Created: {output_name}")
             except Exception as e:
-                msg = f"Failed to apply {trans_name} transformation: {e}"
-                logging.error(msg)
-                continue
+                print(f"  ✗ {name} failed: {e}")
 
     return output_paths
 
 
-def process_single_image(image_path: Path, args: argparse.Namespace) -> None:
-    """Process a single image with transformations."""
-    logging.info(f"Processing image: {image_path}")
+def process_directory(src_dir, dst_dir, mask_only=False):
+    """Process all images in source directory."""
+    src_path = Path(src_dir)
+    dst_path = Path(dst_dir)
 
-    if not image_path.exists():
-        logging.error(f"Image file does not exist: {image_path}")
-        return
+    if not src_path.exists() or not src_path.is_dir():
+        print(f"Error: Invalid source directory: {src_dir}")
+        sys.exit(1)
 
-    if not is_image_file(image_path.name):
-        logging.error(f"File is not a supported image format: {image_path}")
-        return
+    dst_path.mkdir(parents=True, exist_ok=True)
 
-    # Determine if we're in display mode (no destination directory)
-    display_mode = args.destination is None
+    # Find all images
+    images = [f for f in src_path.rglob("*")
+              if f.is_file() and is_image(f.name)]
 
-    if display_mode:
-        # Display transformations
-        apply_transformations(image_path, display_mode=True)
-    else:
-        # Save transformations to destination directory
-        output_dir = Path(args.destination)
-        output_dir.mkdir(parents=True, exist_ok=True)
+    if not images:
+        print(f"No images found in: {src_dir}")
+        sys.exit(1)
 
-        output_paths = apply_transformations(image_path, output_dir)
+    mode = "mask transformations" if mask_only else "all transformations"
+    print(f"\nProcessing {len(images)} images ({mode})...")
 
-        logging.info(f"Successfully created {len(output_paths)} "
-                     f"transformed images:")
-        for path in output_paths:
-            print(f"  {path.name}")
+    for img_path in images:
+        print(f"\n{img_path.name}:")
 
+        # Create subdirectory structure
+        rel_path = img_path.relative_to(src_path)
+        output_subdir = dst_path / rel_path.parent
+        output_subdir.mkdir(parents=True, exist_ok=True)
 
-def process_directory(src_dir: Path, dst_dir: Path,
-                      args: argparse.Namespace) -> None:
-    """Process all images in a source directory."""
-    logging.info(f"Processing directory: {src_dir}")
+        save_transformations(img_path, output_subdir, mask_only)
 
-    if not src_dir.exists():
-        logging.error(f"Source directory does not exist: {src_dir}")
-        return
-
-    if not src_dir.is_dir():
-        logging.error(f"Source path is not a directory: {src_dir}")
-        return
-
-    # Create destination directory
-    dst_dir.mkdir(parents=True, exist_ok=True)
-
-    # Find all image files
-    image_files = []
-    for file_path in src_dir.rglob("*"):
-        if file_path.is_file() and is_image_file(file_path.name):
-            image_files.append(file_path)
-
-    if not image_files:
-        logging.warning(f"No image files found in: {src_dir}")
-        return
-
-    logging.info(f"Found {len(image_files)} image files")
-
-    # Process each image
-    for image_path in image_files:
-        try:
-            # Create subdirectory structure in destination
-            relative_path = image_path.relative_to(src_dir)
-            output_subdir = dst_dir / relative_path.parent
-            output_subdir.mkdir(parents=True, exist_ok=True)
-
-            # Apply transformations
-            apply_transformations(image_path, output_subdir)
-
-        except Exception as e:
-            logging.error(f"Failed to process {image_path}: {e}")
-            continue
-
-    logging.info("Directory processing completed")
+    print(f"\n✓ All transformations saved to: {dst_path}")
 
 
-def create_argument_parser() -> argparse.ArgumentParser:
-    """Create and configure the command line argument parser."""
-    parser = argparse.ArgumentParser(
-        description="""
-Leaffliction - Image Transformation Tool
-
-Apply 6 types of image transformations for leaf feature analysis:
-Gaussian Blur, Mask, ROI Objects, Analyze Object, Pseudolandmarks,
-and Color Histogram.
-
-This tool extracts characteristics from leaf images for disease
-classification.
-        """,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Usage examples:
-  %(prog)s ./Apple/apple_healthy/image (1).JPG        # Display transformations
-  %(prog)s -src ./Apple/apple_healthy/ -dst ./output/ # Process directory
-  %(prog)s -src ./images/ -dst ./output/ -mask        # Process with mask
-  %(prog)s --help                                     # Show this help
-
-Output files (when using -dst):
-  image (1)_GaussianBlur.JPG
-  image (1)_Mask.JPG
-  image (1)_ROIObjects.JPG
-  image (1)_AnalyzeObject.JPG
-  image (1)_Pseudolandmarks.JPG
-  image (1)_ColorHistogram.JPG
-        """
-    )
-
-    # Positional argument for single image mode
-    parser.add_argument(
-        'image_path',
-        nargs='?',
-        help="Path to image file (displays transformations interactively)"
-    )
-
-    # Source directory argument
-    parser.add_argument(
-        '-src', '--source',
-        metavar='DIR',
-        help="Source directory containing images to process"
-    )
-
-    # Destination directory argument
-    parser.add_argument(
-        '-dst', '--destination',
-        metavar='DIR',
-        help="Destination directory for transformed images"
-    )
-
-    # Mask focus option
-    parser.add_argument(
-        '-mask',
-        action='store_true',
-        help="Focus on mask-based transformations"
-    )
-
-    # Verbose output
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help="Verbose output for debugging"
-    )
-
-    return parser
-
-
-def main() -> None:
-    """Main program function."""
-    parser = create_argument_parser()
-    args = parser.parse_args()
-
-    # Configure logging
-    setup_logging(args.verbose)
-
+def main():
+    """Main function."""
     try:
-        # Validate arguments
-        if args.image_path and (args.source or args.destination):
-            parser.error("Cannot use positional image_path with "
-                         "-src/-dst options")
+        # Show help
+        if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
+            print(__doc__)
+            sys.exit(0)
 
-        if args.source and not args.destination:
-            parser.error("-dst (destination) is required when using "
-                         "-src (source)")
+        # Directory mode
+        if '-src' in sys.argv:
+            if '-dst' not in sys.argv:
+                print("Error: -dst required when using -src")
+                sys.exit(1)
 
-        if not args.image_path and not args.source:
-            parser.error("Must specify either image_path or -src option")
+            src_idx = sys.argv.index('-src')
+            dst_idx = sys.argv.index('-dst')
 
-        logging.info("Starting image transformation process...")
+            if src_idx + 1 >= len(sys.argv) or dst_idx + 1 >= len(sys.argv):
+                print("Error: Missing directory path")
+                sys.exit(1)
 
-        if args.image_path:
-            # Single image mode - display transformations
-            input_path = Path(args.image_path).resolve()
-            process_single_image(input_path, args)
-        else:
-            # Directory mode - save transformations
-            src_path = Path(args.source).resolve()
-            dst_path = Path(args.destination).resolve()
-            process_directory(src_path, dst_path, args)
+            src_dir = sys.argv[src_idx + 1]
+            dst_dir = sys.argv[dst_idx + 1]
+            mask_only = '-mask' in sys.argv
 
-        logging.info("Image transformation completed successfully")
+            process_directory(src_dir, dst_dir, mask_only)
+            return
+
+        # Single image mode
+        image_path = Path(sys.argv[1]).resolve()
+
+        if not image_path.exists() or not image_path.is_file():
+            print(f"Error: File not found: {image_path}")
+            sys.exit(1)
+
+        if not is_image(image_path.name):
+            print(f"Error: Not a valid image: {image_path}")
+            sys.exit(1)
+
+        print(f"\nProcessing: {image_path.name}")
+        print("Applying 6 transformations...\n")
+
+        display_transformations(image_path)
 
     except KeyboardInterrupt:
-        logging.info("Process interrupted by user")
-        sys.exit(1)
+        print("\n\n⚠ Operation cancelled by user")
+        sys.exit(130)
     except Exception as e:
-        logging.error(f"Error during transformation: {e}")
-        if args.verbose:
-            logging.exception("Error details:")
+        print(f"\n✗ Unexpected error: {e}")
         sys.exit(1)
 
 
