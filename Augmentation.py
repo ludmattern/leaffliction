@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-"""
-Augmentation.py - Leaffliction Part 2: Data Augmentation
+"""Augmentation.py - Data Augmentation Tool
 
 Applies 6 types of data augmentation to leaf images.
-Saves augmented images with original filename + augmentation type.
 
 Usage:
-    ./Augmentation.py <image_path>
-    ./Augmentation.py ./Apple/apple_healthy/image (1).JPG
+  ./Augmentation.py <image_path>
+  ./Augmentation.py --balance <stats.json> [--output <dir>]
+
+Modes:
+  Single image: Applies 6 augmentations to one image
+  Balance dataset: Balances dataset using Distribution stats
+
+Examples:
+  ./Augmentation.py ./Apple/image.JPG
+  ./Augmentation.py --balance stats.json --output augmented
 """
 
 import sys
@@ -248,26 +254,12 @@ def balance_dataset(stats_file, output_dir):
 
 def main():
     """Main function."""
-    # Check arguments
-    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', 'help']:
-        print("Augmentation.py - Data Augmentation Tool")
-        print("\nUsage:")
-        print("  ./Augmentation.py <image_path>")
-        print("  ./Augmentation.py --balance <stats.json> --output <dir>")
-        print("\nModes:")
-        print("  Single image mode:")
-        print("    Applies 6 augmentations to one image")
-        print("\n  Balance dataset mode:")
-        print("    Balances entire dataset using Distribution stats")
-        print("\nOptions:")
-        print("  --balance FILE  JSON stats file from Distribution.py")
-        print("  --output DIR Output directory (default: augmented_dataset)")
-        print("\nExamples:")
-        print("  ./Augmentation.py ./Apple/apple_healthy/image (1).JPG")
-        print("  ./Augmentation.py --balance stats.json --output augmented")
+    # Show help
+    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
+        print(__doc__)
         sys.exit(0)
 
-    # Check for balance mode
+    # Balance dataset mode
     if '--balance' in sys.argv:
         idx = sys.argv.index('--balance')
         if idx + 1 >= len(sys.argv):
@@ -276,40 +268,24 @@ def main():
 
         stats_file = Path(sys.argv[idx + 1])
         if not stats_file.exists():
-            print(f"Error: Stats file '{stats_file}' not found")
+            print(f"Error: Stats file not found: {stats_file}")
             sys.exit(1)
 
-        # Get output directory
-        output_dir = 'augmented_dataset'
-        if '--output' in sys.argv:
-            out_idx = sys.argv.index('--output')
-            if out_idx + 1 < len(sys.argv):
-                output_dir = sys.argv[out_idx + 1]
+        output_dir = sys.argv[sys.argv.index('--output') + 1] \
+            if '--output' in sys.argv else 'augmented_dataset'
 
         balance_dataset(stats_file, output_dir)
         return
 
     # Single image mode
-    if len(sys.argv) != 2:
-        print("Error: Invalid arguments. Use -h for help")
-        sys.exit(1)
-
-    # Get image path
     image_path = Path(sys.argv[1]).resolve()
 
-    # Validate
-    if not image_path.exists():
-        print(f"Error: File '{image_path}' does not exist")
+    if not image_path.exists() or not image_path.is_file():
+        print(f"Error: File not found: {image_path}")
         sys.exit(1)
 
-    if not image_path.is_file():
-        print(f"Error: '{image_path}' is not a file")
-        sys.exit(1)
-
-    # Check if it's an image
-    valid_ext = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
-    if image_path.suffix.lower() not in valid_ext:
-        print(f"Error: '{image_path}' is not a valid image file")
+    if not is_image(image_path.name):
+        print(f"Error: Not a valid image: {image_path}")
         sys.exit(1)
 
     # Process image

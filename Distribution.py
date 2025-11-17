@@ -1,13 +1,26 @@
 #!/usr/bin/env python3
-"""
-Distribution.py - Leaffliction Part 1: Dataset Analysis
+"""Distribution.py - Dataset Analysis Tool
 
 Analyzes leaf disease dataset and generates distribution charts.
-Takes a directory as argument and displays pie + bar charts.
 
 Usage:
-    ./Distribution.py <directory>
-    ./Distribution.py ./Apple
+  ./Distribution.py <directory> [--export stats.json]
+
+Description:
+  Analyzes image distribution in a dataset and displays
+  pie chart and bar chart for visualization.
+
+Options:
+  --export FILE  Export statistics to JSON file
+
+Supported structures:
+  - Flat:         dataset/Disease/images.jpg
+  - Hierarchical: dataset/Plant/Disease/images.jpg
+  - Any depth:    dataset/A/B/C/.../images.jpg
+
+Examples:
+  ./Distribution.py ./Apple
+  ./Distribution.py ./leaves --export stats.json
 """
 
 import sys
@@ -156,25 +169,9 @@ def print_statistics(counts, dataset_name):
 def main():
     """Main function - analyze dataset and display charts."""
     # Check arguments and show help
-    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help', 'help']:
-        print("Distribution.py - Leaffliction Dataset Analysis")
-        print("\nUsage:")
-        print("  ./Distribution.py <directory> [--export stats.json]")
-        print("\nDescription:")
-        print("  Analyzes image distribution in a dataset and displays")
-        print("  pie chart and bar chart for visualization.")
-        print("\nOptions:")
-        print("  --export FILE  Export statistics to JSON file")
-        print("\nSupported structures:")
-        print("  - Flat:        dataset/Disease/images.jpg")
-        print("  - Hierarchical: dataset/Plant/Disease/images.jpg")
-        print("  - Any depth:   dataset/A/B/C/.../images.jpg")
-        print("\nExamples:")
-        print("  ./Distribution.py ./Apple")
-        print("  ./Distribution.py ./leaves --export stats.json")
-        print("  ./Distribution.py /path/to/dataset")
-        sys.exit(0 if len(sys.argv) > 1 and
-                 sys.argv[1] in ['-h', '--help', 'help'] else 1)
+    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
+        print(__doc__)
+        sys.exit(0)
 
     # Parse arguments
     directory = Path(sys.argv[1]).resolve()
