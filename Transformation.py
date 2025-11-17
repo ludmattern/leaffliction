@@ -84,24 +84,37 @@ class Transformation:
                                        img_type=cv.THRESH_BINARY)
         
         # Apply Gaussian blur using PlantCV
-        blurred = pcv.gaussian_blur(img=binary_mask, ksize=(10, 10),
+        blurred = pcv.gaussian_blur(img=binary_mask, ksize=(15, 15),
                                     sigma_x=0, sigma_y=None)
         return blurred
 
     def transform_roi_objects(self):
         """ROI Objects transformation - draw contours."""
-        contours, _ = cv.findContours(self.mask, cv.RETR_TREE,
+        # Use the same binary mask as mask and gaussian blur
+        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
+                                      channel=1,
+                                      thresh=58,
+                                      img_type=cv.THRESH_BINARY)
+        
+        # Find contours to get bounding rectangle
+        contours, _ = cv.findContours(binary_mask, cv.RETR_EXTERNAL,
                                       cv.CHAIN_APPROX_SIMPLE)
+        
+        # Start with original image
         result = self.img.copy()
-        cv.drawContours(result, contours, -1, (0, 255, 0), 2)
-
-        # Add bounding boxes for large objects
-        for contour in contours:
-            area = cv.contourArea(contour)
-            if area > 1000:
-                x, y, w, h = cv.boundingRect(contour)
-                cv.rectangle(result, (x, y), (x + w, y + h),
-                             (255, 0, 0), 2)
+        
+        if contours:
+            # Fill the masked area in green
+            result[binary_mask > 0] = [0, 255, 0]
+            
+            # Get bounding rectangle for all contours combined
+            all_points = np.vstack(contours)
+            x, y, w, h = cv.boundingRect(all_points)
+            
+            # Draw single rectangle around entire leaf
+            cv.rectangle(result, (x, y), (x + w, y + h),
+                         (255, 0, 0), 2)
+        
         return result
 
     def transform_analyze_object(self):
