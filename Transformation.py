@@ -135,27 +135,62 @@ class Transformation:
                                         n_labels=1)
         return shape_img
 
+    def _is_in_circle(self, x, y, center_x, center_y, radius):
+        """Check if pixel (x, y) is in circle."""
+        return (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2
+
+    def _draw_pseudolandmarks(self, img, pseudolandmarks, color, radius):
+        """Draw pseudolandmark circles on image."""
+        if pseudolandmarks is None or len(pseudolandmarks) == 0:
+            return img
+        
+        # Iterate through pseudolandmarks structure
+        for i in range(len(pseudolandmarks)):
+            if (len(pseudolandmarks[i]) >= 1 and
+                    len(pseudolandmarks[i][0]) >= 2):
+                center_x = pseudolandmarks[i][0][1]
+                center_y = pseudolandmarks[i][0][0]
+                
+                # Draw circle by checking each pixel
+                for x in range(img.shape[0]):
+                    for y in range(img.shape[1]):
+                        if self._is_in_circle(x, y, center_x, center_y,
+                                              radius):
+                            img[x, y] = color
+        
+        return img
+
     def transform_pseudolandmarks(self):
-        """Pseudolandmarks transformation - corner detection."""
-        gray = cv.cvtColor(self.img, cv.COLOR_BGR2GRAY)
-
-        # Mask gray image
-        gray_masked = cv.bitwise_and(gray, gray, mask=self.mask)
-
-        # Detect corners
-        corners = cv.goodFeaturesToTrack(gray_masked, maxCorners=50,
-                                         qualityLevel=0.01, minDistance=20)
-
+        """Pseudolandmarks transformation."""
+        # Use the same binary mask as other transformations
+        binary_mask = self._grayscale(cv.COLOR_BGR2HSV,
+                                      channel=1,
+                                      thresh=58,
+                                      img_type=cv.THRESH_BINARY)
+        
+        # Disable debug to avoid creating plots
+        pcv.params.debug = None
+        
         result = self.img.copy()
-
-        # Draw landmarks
-        if corners is not None:
-            for i, corner in enumerate(corners):
-                x, y = corner.ravel()
-                cv.circle(result, (int(x), int(y)), 5, (0, 0, 255), -1)
-                cv.putText(result, str(i + 1), (int(x) + 10, int(y) + 10),
-                           cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
+        
+        # Get pseudolandmarks on both axes
+        top, bottom, center_v = pcv.homology.x_axis_pseudolandmarks(
+            img=result, mask=binary_mask, label="leaf")
+        left, right, center_h = pcv.homology.y_axis_pseudolandmarks(
+            img=result, mask=binary_mask, label="leaf")
+        
+        # Draw pseudolandmarks on the image
+        result = self._draw_pseudolandmarks(result, top, (0, 0, 255), 5)
+        result = self._draw_pseudolandmarks(result, bottom,
+                                            (255, 0, 255), 5)
+        result = self._draw_pseudolandmarks(result, center_v,
+                                            (255, 0, 0), 5)
+        result = self._draw_pseudolandmarks(result, left, (0, 255, 0), 5)
+        result = self._draw_pseudolandmarks(result, right,
+                                            (255, 255, 0), 5)
+        result = self._draw_pseudolandmarks(result, center_h,
+                                            (0, 255, 255), 5)
+        
         return result
 
     def transform_color_histogram(self):
