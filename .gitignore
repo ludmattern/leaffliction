@@ -130,3 +130,6 @@ dmypy.json
 
 leaves/
 augmented_test/
+augmented_leaves/
+transformed_leaves/
+stats.json

@@ -5,7 +5,7 @@ Applies 6 types of image transformations for leaf feature extraction.
 
 Usage:
   ./Transformation.py <image_path>
-  ./Transformation.py -src <dir> -dst <dir> [-mask]
+  ./Transformation.py -src <dir> -dst <dir>
 
 Transformations:
   Gaussian Blur, Mask, ROI Objects, Analyze Object,
