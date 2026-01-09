@@ -169,6 +169,12 @@ def print_statistics(counts, dataset_name):
 def main():
     """Main function - analyze dataset and display charts."""
     try:
+        # No-plot
+        no_plot = False
+        if "-np" in sys.argv:
+            no_plot = True
+            sys.argv.remove("-np")
+
         # Check arguments and show help
         if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
             print(__doc__)
@@ -227,8 +233,11 @@ def main():
             print(f"\n✓ Statistics exported to: {export_file}")
 
         # Display charts
-        print("Generating charts...")
-        display_charts(counts, dataset_name)
+        if no_plot:
+            print("Skipping chart generation")
+        else :
+            print("Generating charts...")
+            display_charts(counts, dataset_name)
 
     except KeyboardInterrupt:
         print("\n\n⚠ Operation cancelled by user")

@@ -303,7 +303,7 @@ def display_transformations(image_path):
     plt.show()
 
 
-def save_transformations(image_path, output_dir, mask_only=False):
+def save_transformations(image_path, output_dir, mask_only=False, silent=False):
     """Save all transformations to files."""
     image = cv.imread(str(image_path))
     if image is None:
@@ -324,7 +324,8 @@ def save_transformations(image_path, output_dir, mask_only=False):
             output_path = output_dir / output_name
             cv.imwrite(str(output_path), result)
             output_paths.append(output_path)
-            print(f"  Created: {output_name}")
+            if not silent:
+                print(f"  Created: {output_name}")
         except Exception as e:
             print(f"  ✗ Mask failed: {e}")
     else:
@@ -337,14 +338,15 @@ def save_transformations(image_path, output_dir, mask_only=False):
                 output_path = output_dir / output_name
                 cv.imwrite(str(output_path), result)
                 output_paths.append(output_path)
-                print(f"  Created: {output_name}")
+                if not silent:
+                    print(f"  Created: {output_name}")
             except Exception as e:
                 print(f"  ✗ {name} failed: {e}")
 
     return output_paths
 
 
-def process_directory(src_dir, dst_dir, mask_only=False):
+def process_directory(src_dir, dst_dir, mask_only=False, silent=False):
     """Process all images in source directory."""
     src_path = Path(src_dir)
     dst_path = Path(dst_dir)
@@ -367,14 +369,15 @@ def process_directory(src_dir, dst_dir, mask_only=False):
     print(f"\nProcessing {len(images)} images ({mode})...")
 
     for img_path in images:
-        print(f"\n{img_path.name}:")
+
+        if not silent:
+            print(f"\n{img_path.name}:")
 
         # Create subdirectory structure
         rel_path = img_path.relative_to(src_path)
         output_subdir = dst_path / rel_path.parent
         output_subdir.mkdir(parents=True, exist_ok=True)
-
-        save_transformations(img_path, output_subdir, mask_only)
+        save_transformations(img_path, output_subdir, mask_only, silent)
 
     print(f"\n✓ All transformations saved to: {dst_path}")
 
@@ -382,6 +385,12 @@ def process_directory(src_dir, dst_dir, mask_only=False):
 def main():
     """Main function."""
     try:
+        # Silent mode
+        silent = False
+        if "-s" in sys.argv:
+            silent = True
+            sys.argv.remove("-s")
+
         # Show help
         if len(sys.argv) < 2 or sys.argv[1] in ["-h", "--help"]:
             print(__doc__)
@@ -404,7 +413,7 @@ def main():
             dst_dir = sys.argv[dst_idx + 1]
             mask_only = "-mask" in sys.argv
 
-            process_directory(src_dir, dst_dir, mask_only)
+            process_directory(src_dir, dst_dir, mask_only, silent)
             return
 
         # Single image mode
@@ -421,7 +430,7 @@ def main():
         print(f"\nProcessing: {image_path.name}")
         print("Applying 6 transformations...\n")
 
-        display_transformations(image_path)
+        display_transformations(image_path, silent)
 
     except KeyboardInterrupt:
         print("\n\n⚠ Operation cancelled by user")

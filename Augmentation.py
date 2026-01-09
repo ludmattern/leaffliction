@@ -199,7 +199,7 @@ def balance_dataset(stats_file, output_dir):
         needed = target_count - current_count
 
         if needed <= 0:
-            print(f"  Already balanced, copied {current_count} images")
+            print(f"  Already balanced, copied {current_count} images\n")
             continue
 
         # Calculate augmentations needed per image
