@@ -235,7 +235,7 @@ def main():
         # Display charts
         if no_plot:
             print("Skipping chart generation")
-        else :
+        else:
             print("Generating charts...")
             display_charts(counts, dataset_name)
 

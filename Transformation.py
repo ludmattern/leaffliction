@@ -303,7 +303,8 @@ def display_transformations(image_path):
     plt.show()
 
 
-def save_transformations(image_path, output_dir, mask_only=False, silent=False):
+def save_transformations(image_path, output_dir, mask_only=False,
+                         silent=False):
     """Save all transformations to files."""
     image = cv.imread(str(image_path))
     if image is None:
