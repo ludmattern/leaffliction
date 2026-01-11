@@ -223,7 +223,7 @@ def train_model(model: models.Model,
 
 
 def create_final_archive(config: TrainConfig) -> None:
-    """Crée l'archive ZIP contenant le modèle et le dataset transformé."""
+    """Create Zip with dataset"""
     logging.info("Creating ZIP archive...")
 
     try:
